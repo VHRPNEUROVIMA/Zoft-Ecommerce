@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
+      # Postgres service used by Laravel during tests
       postgres:
         image: postgres:16
         env:
@@ -26,17 +27,17 @@ jobs:
           --health-retries=5
 
     env:
+      APP_ENV: testing
       DB_CONNECTION: pgsql
       DB_HOST: 127.0.0.1
       DB_PORT: 5432
       DB_DATABASE: zoft_admin_test
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
-      APP_ENV: testing
-      APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
       CACHE_DRIVER: array
       SESSION_DRIVER: array
       QUEUE_CONNECTION: sync
+      CI: true
 
     steps:
       - name: Checkout code
@@ -48,11 +49,12 @@ jobs:
           php-version: '8.3'
           extensions: mbstring, intl, pdo_pgsql
           coverage: none
+          cache: composer
 
       - name: Install Composer dependencies
-        run: composer install --no-progress --no-interaction --prefer-dist
+        run: composer install --no-interaction --no-progress --prefer-dist --optimize-autoloader
 
-      - name: Copy .env.testing
+      - name: Prepare environment file
         run: |
           if [ -f .env.testing ]; then
             cp .env.testing .env
@@ -61,27 +63,29 @@ jobs:
           fi
 
       - name: Generate app key
-        run: php artisan key:generate
+        run: php artisan key:generate --force
 
       - name: Run migrations
         run: php artisan migrate --force
 
-      - name: Setup Node with pnpm
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
           cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install pnpm
-        run: npm install -g pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
 
       - name: Install frontend dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build frontend assets
         run: pnpm run build
-        env:
-          CI: true
 
       - name: Run tests
         run: |
